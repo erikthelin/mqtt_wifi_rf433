@@ -12,7 +12,10 @@ mqtt:
 switch:
   - platform: mqtt
     name: "Utomhusbelysning"
-    command_topic: "node/luxorparts/utomhus/set"
+    command_topic: "node/luxorparts/1/1/set"
+  - platform: mqtt
+    name: "Loftet"
+    command_topic: "node/luxorparts/1/4/set"
  * 
  */
 #include <PubSubClient.h>
@@ -23,14 +26,11 @@ RCSwitch mySwitch = RCSwitch();
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-const char* ssid = "....";				  // WiFi SSID
-const char* password = "....";			  // WiFi password
-const char* mqtt_server = "192.168.x.x";  // IP address to mqtt server
-const int ledPin = BUILTIN_LED;
+const char* ssid = "....";					// WiFi SSID
+const char* password = "....";				// WiFi password
+const char* mqtt_server = "192.168.x.x";	// IP address to mqtt server
+const char* subscriptionTopic = "node/luxorparts/+/+/set";  // First wildcard is group (1-4 [I-IV]), second is device (1-4)
 const int txPin = 15;                      // GPIO pin for RF 433 tx device
-const int groupNumber = 1;                 // 1-4
-const int switchNumber = 1;                // 1-4
-const char* subscriptionTopic = "node/luxorparts/utomhus/set";
 
 void setup() {
   Serial.begin(9600);
@@ -39,8 +39,6 @@ void setup() {
   setup_wifi();
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
-
-  pinMode(ledPin, OUTPUT);
 }
 
 void loop() {
@@ -75,19 +73,28 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] ");
+  
   char receivedStr[length+1];
   receivedStr[length] = '\0';
   memcpy(receivedStr, payload, length);
 
+  int groupId = 0;
+  int switchId = 0;
+  int n = sscanf(topic, "node/luxorparts/%d/%d/set", &groupId, &switchId);
+ 
+  Serial.print("{");
+  Serial.print(groupId);
+  Serial.print("-");
+  Serial.print(switchId);
+  Serial.print("} ");
+  
   Serial.print(receivedStr);
 
   if (strcmp(receivedStr, "ON") == 0) {
-    digitalWrite(ledPin, LOW);
-    mySwitch.switchOn(groupNumber, switchNumber);
+    mySwitch.switchOn(groupId, switchId);
   }
   if (strcmp(receivedStr, "OFF") == 0) {
-    digitalWrite(ledPin, HIGH);
-    mySwitch.switchOff(groupNumber, switchNumber);
+    mySwitch.switchOff(groupId, switchId);
   }
 
   Serial.println();
@@ -97,8 +104,10 @@ void reconnect() {
   // Loop until we're reconnected
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
+    // Attempt to connect
     if (client.connect("wemosClient")) {
       Serial.println("connected");
+      // ... and subscribe to topic
       client.subscribe(subscriptionTopic);
     } else {
       Serial.print("failed, rc=");
