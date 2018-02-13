@@ -26,9 +26,10 @@ RCSwitch mySwitch = RCSwitch();
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-const char* ssid = "....";					// WiFi SSID
-const char* password = "....";				// WiFi password
-const char* mqtt_server = "192.168.x.x";	// IP address to mqtt server
+const char* ssid = "....";             // WiFi SSID
+const char* password = "....";    // WiFi password
+const char* mqtt_server = "192.168.x.x";  // IP address to mqtt server
+const char* mqtt_server_fallback = "192.168.x.x2";  // IP address to fallback mqtt server
 const char* subscriptionTopic = "node/luxorparts/+/+/set";  // First wildcard is group (1-4 [I-IV]), second is device (1-4)
 const int txPin = 15;                      // GPIO pin for RF 433 tx device
 
@@ -102,8 +103,13 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 void reconnect() {
   // Loop until we're reconnected
+  boolean useFallback = false;
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
+    Serial.print("[");
+    Serial.print(useFallback ? mqtt_server_fallback : mqtt_server);
+    Serial.print("] ");
+    
     // Attempt to connect
     if (client.connect("wemosClient")) {
       Serial.println("connected");
@@ -113,6 +119,14 @@ void reconnect() {
       Serial.print("failed, rc=");
       Serial.print(client.state());
       Serial.println(" try again in 5 seconds");
+
+      if(useFallback) {        
+        client.setServer(mqtt_server, 1883);
+      } else {
+        client.setServer(mqtt_server_fallback, 1883);
+      }
+      useFallback = !useFallback;
+      
       // Wait 5 seconds before retrying
       delay(5000);
     }
